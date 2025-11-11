@@ -1,0 +1,297 @@
+/* Dashboard Styles */
+:root {
+  --color-col-1: #f9fafe;
+  --color-col-2: #3741510d;
+  --color-col-3: #f8f5ff;
+  --color-col-4: #5f2dc4;
+  --color-col-5: #111827;
+  --color-col-6: #6b7280;
+  --color-col-7: #181d27;
+  --color-col-8: #4b5563;
+  --color-col-9: #f5f7fa;
+  --color-col-10: #ffffff33;
+  --color-col-11: #e0e7ff;
+  --color-col-12: #c7d2fe;
+  --color-col-13: #ffffffd9;
+  --color-col-14: #f3f4f6;
+  --color-col-15: #16a34a;
+  --color-col-16: #3a197d;
+  --color-col-17: #22c55e;
+  --color-col-18: #dcfce7;
+  --color-col-19: #166534;
+  --font-inter: "Inter", sans-serif;
+}
+
+/* Body styles are handled by globals.css */
+
+/* Sidebar Styles */
+.sidebar-nav-link {
+  display: flex;
+  height: 3rem;
+  align-items: center;
+  column-gap: 1rem;
+  border-radius: 0.75rem;
+  padding-inline: 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--color-col-5);
+  transition: all 300ms;
+}
+
+.sidebar-nav-link:hover {
+  background-color: var(--color-col-3);
+  color: var(--color-col-4);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  transition: opacity 0.3s ease;
+  opacity: 0;
+}
+
+.sidebar-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+body.sidebar-open {
+  overflow: hidden;
+}
+
+.drop-shadow-1 {
+  box-shadow: 0px 12px 16px -4px rgba(10, 13, 18, 0.078);
+}
+
+/* Utility Classes */
+.text-col-4 {
+  color: var(--color-col-4);
+}
+
+.text-col-5 {
+  color: var(--color-col-5);
+}
+
+.text-col-6 {
+  color: var(--color-col-6);
+}
+
+.text-col-7 {
+  color: var(--color-col-7);
+}
+
+.text-col-8 {
+  color: var(--color-col-8);
+}
+
+.text-col-11 {
+  color: var(--color-col-11);
+}
+
+.text-col-12 {
+  color: var(--color-col-12);
+}
+
+.text-col-15 {
+  color: var(--color-col-15);
+}
+
+.text-col-16 {
+  color: var(--color-col-16);
+}
+
+.text-col-17 {
+  color: var(--color-col-17);
+}
+
+.text-col-18 {
+  color: var(--color-col-18);
+}
+
+.text-col-19 {
+  color: var(--color-col-19);
+}
+
+.bg-col-3 {
+  background-color: var(--color-col-3);
+}
+
+.bg-col-4 {
+  background-color: var(--color-col-4);
+}
+
+.bg-col-10 {
+  background-color: var(--color-col-10);
+}
+
+.bg-col-13 {
+  background-color: var(--color-col-13);
+}
+
+.bg-col-14 {
+  background-color: var(--color-col-14);
+}
+
+.bg-col-17 {
+  background-color: var(--color-col-17);
+}
+
+.bg-col-18 {
+  background-color: var(--color-col-18);
+}
+
+.border-col-2 {
+  border-color: var(--color-col-2);
+}
+
+.border-col-9 {
+  border-color: var(--color-col-9);
+}
+
+.border-col-10 {
+  border-color: var(--color-col-10);
+}
+
+.border-col-14 {
+  border-color: var(--color-col-14);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1023px) {
+  .max-lg\:items-center {
+    align-items: center;
+  }
+
+  .max-lg\:mt-6 {
+    margin-top: 1.5rem;
+  }
+
+  .max-lg\:flex-col {
+    flex-direction: column;
+  }
+
+  .max-lg\:col-span-7 {
+    grid-column: span 7 / span 7;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg\:translate-x-0 {
+    transform: translateX(0);
+  }
+
+  .lg\:ml-72 {
+    margin-left: 18rem;
+  }
+
+  .lg\:pt-8 {
+    padding-top: 2rem;
+  }
+
+  .lg\:px-6 {
+    padding-inline: 1.5rem;
+  }
+
+  .lg\:text-3xl {
+    font-size: 1.875rem;
+  }
+
+  .lg\:text-base {
+    font-size: 1rem;
+  }
+
+  .lg\:text-lg {
+    font-size: 1.125rem;
+  }
+
+  .lg\:text-2xl {
+    font-size: 1.5rem;
+  }
+
+  .lg\:text-\[26px\] {
+    font-size: 26px;
+  }
+
+  .lg\:text-\[27\.3px\] {
+    font-size: 27.3px;
+  }
+
+  .lg\:text-\[42\.75px\] {
+    font-size: 42.75px;
+  }
+
+  .lg\:leading-9 {
+    line-height: 2.25rem;
+  }
+
+  .lg\:leading-12 {
+    line-height: 3rem;
+  }
+
+  .lg\:leading-\[38px\] {
+    line-height: 38px;
+  }
+
+  .lg\:mb-8 {
+    margin-bottom: 2rem;
+  }
+
+  .lg\:mb-2\.5 {
+    margin-bottom: 0.625rem;
+  }
+
+  .lg\:pb-8 {
+    padding-bottom: 2rem;
+  }
+
+  .lg\:pt-8 {
+    padding-top: 2rem;
+  }
+
+  .lg\:px-10 {
+    padding-inline: 2.5rem;
+  }
+
+  .lg\:py-8 {
+    padding-block: 2rem;
+  }
+
+  .lg\:gap-x-4 {
+    column-gap: 1rem;
+  }
+
+  .lg\:gap-x-5 {
+    column-gap: 1.25rem;
+  }
+
+  .lg\:h-8 {
+    height: 2rem;
+  }
+
+  .lg\:w-8 {
+    width: 2rem;
+  }
+
+  .lg\:hidden {
+    display: none;
+  }
+
+  .lg\:order-1 {
+    order: 1;
+  }
+
+  .lg\:order-3 {
+    order: 3;
+  }
+
+  .lg\:col-span-7 {
+    grid-column: span 7 / span 7;
+  }
+}
