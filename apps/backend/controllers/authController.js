@@ -22,7 +22,7 @@ const setTokenCookie = (res, token) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax", // Allows cross-site requests with credentials
+    sameSite: "none", // Allows cross-site requests with credentials
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: "/", // Available on all paths
   };
@@ -649,7 +649,7 @@ export const signout = async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "none",
       path: "/",
     };
     res.clearCookie("token", cookieOptions);
