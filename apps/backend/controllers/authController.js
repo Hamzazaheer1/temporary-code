@@ -250,11 +250,40 @@ export const signin = async (req, res) => {
     // If privyToken is provided, verify it using Privy's verifyAuthToken
     if (privyToken) {
       try {
+        const trimmedToken =
+          typeof privyToken === "string" ? privyToken.trim() : "";
+
+        if (!trimmedToken) {
+          console.error("Privy token was provided but empty after trimming");
+          return res.status(401).json({
+            success: false,
+            message: "Invalid token: token is empty",
+          });
+        }
+
+        const bearerPrefixMatch = /^Bearer\s+/i;
+        const normalizedToken = trimmedToken.replace(bearerPrefixMatch, "");
+
+        if (normalizedToken !== trimmedToken) {
+          console.log("Removed Bearer prefix from provided Privy token");
+        }
+
+        if (!normalizedToken || normalizedToken.includes(" ")) {
+          console.error("Normalized Privy token is invalid", {
+            hasSpace: normalizedToken?.includes(" "),
+            length: normalizedToken?.length,
+          });
+          return res.status(401).json({
+            success: false,
+            message: "Invalid token format",
+          });
+        }
+
         // Verify the Privy access token
         const verifiedClaims = await privy
           .utils()
           .auth()
-          .verifyAuthToken(privyToken);
+          .verifyAuthToken(normalizedToken);
 
         // Log the entire verified claims object for debugging
         console.log(
