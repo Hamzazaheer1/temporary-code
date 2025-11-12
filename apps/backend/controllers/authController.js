@@ -279,6 +279,8 @@ export const signin = async (req, res) => {
           });
         }
 
+        console.log("Normalized token:", normalizedToken);
+
         // Verify the Privy access token
         const verifiedClaims = await privy
           .utils()
