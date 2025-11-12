@@ -621,7 +621,6 @@ export const signout = async (req, res) => {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      expires: new Date(0),
     };
     res.clearCookie("token", cookieOptions);
     res.clearCookie("privy-token", cookieOptions);
