@@ -481,6 +481,7 @@ export const signin = async (req, res) => {
           },
         });
       } catch (verifyError) {
+        console.error("Error verifying Privy token:", verifyError);
         return res.status(401).json({
           success: false,
           message: "Invalid or expired token",
