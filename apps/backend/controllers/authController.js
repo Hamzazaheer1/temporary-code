@@ -232,11 +232,21 @@ export const signin = async (req, res) => {
         });
       }
 
+      // Debug: Log before verification
+      console.log("========== PRIVY TOKEN VERIFICATION START ==========");
+      console.log("Privy App ID:", process.env.PRIVY_APP_ID ? "SET ✓" : "NOT SET ✗");
+      console.log("Privy App Secret:", process.env.PRIVY_APP_SECRET ? "SET ✓" : "NOT SET ✗");
+      console.log("Token Length:", normalizedToken.length);
+      console.log("Token Preview:", normalizedToken.substring(0, 30) + "...");
+      
       // Verify the Privy access token
       const verifiedClaims = await privy
         .utils()
         .auth()
         .verifyAuthToken(normalizedToken);
+      
+      console.log("Token Verification: SUCCESS ✓");
+      console.log("==================================================");
 
       // Log the entire verified claims object for debugging
       console.log(
@@ -471,11 +481,25 @@ export const signin = async (req, res) => {
         },
       });
     } catch (verifyError) {
-      console.error("Error verifying Privy token:", verifyError);
+      // Detailed error logging for debugging
+      console.error("========== PRIVY TOKEN VERIFICATION ERROR ==========");
+      console.error("Error Type:", verifyError.constructor.name);
+      console.error("Error Message:", verifyError.message);
+      console.error("Error Code:", verifyError.code || "N/A");
+      console.error("Error Status:", verifyError.status || "N/A");
+      console.error("Full Error:", JSON.stringify(verifyError, Object.getOwnPropertyNames(verifyError)));
+      console.error("Privy App ID Set:", !!process.env.PRIVY_APP_ID);
+      console.error("Privy App Secret Set:", !!process.env.PRIVY_APP_SECRET);
+      console.error("Token Length:", normalizedToken?.length || 0);
+      console.error("Token First 20 chars:", normalizedToken?.substring(0, 20) || "N/A");
+      console.error("==================================================");
+      
       return res.status(401).json({
         success: false,
         message: "Invalid or expired token",
-        error: verifyError.message,
+        error: verifyError.message || "Token verification failed",
+        errorType: verifyError.constructor.name,
+        errorCode: verifyError.code || verifyError.status || "UNKNOWN",
       });
     }
   } catch (error) {
