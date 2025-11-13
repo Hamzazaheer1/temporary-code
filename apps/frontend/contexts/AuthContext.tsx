@@ -5,132 +5,88 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
   ReactNode,
 } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { authApi, User } from "@/lib/api";
+import { setAccessTokenFetcher } from "@/lib/axios";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   authenticated: boolean;
-  token: string | null;
   signup: (email: string, name?: string) => Promise<void>;
-  signin: (email: string, privyToken?: string, name?: string) => Promise<void>;
+  signin: (email: string, privyToken: string, name?: string) => Promise<void>;
   signout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  setToken: (token: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load token from localStorage on mount
+  const {
+    ready,
+    authenticated: privyAuthenticated,
+    getAccessToken,
+    logout,
+  } = usePrivy();
+
   useEffect(() => {
-    const validateAndLoadToken = async () => {
-      const storedToken = localStorage.getItem("privy_token");
-      if (storedToken) {
-        // Validate token structure before using it
-        try {
-          // Basic JWT structure check - should have 3 parts separated by dots
-          const parts = storedToken.split(".");
-          if (parts.length !== 3) {
-            console.warn("Invalid token format, clearing...");
-            localStorage.removeItem("privy_token");
-            setLoading(false);
-            return;
-          }
-          // Decode payload to check if it has privyUserId (without verification)
-          const payload = JSON.parse(atob(parts[1]));
-          if (!payload.privyUserId) {
-            console.warn(
-              "Token missing privyUserId, clearing old/invalid token..."
-            );
-            localStorage.removeItem("privy_token");
-            // Also clear cookies by calling signout endpoint
-            // This ensures both localStorage and cookies are cleared
-            try {
-              await authApi.signout();
-            } catch (e) {
-              // Ignore signout errors
-            }
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn("Error checking token structure, clearing...", e);
-          localStorage.removeItem("privy_token");
-          setLoading(false);
-          return;
-        }
-        setToken(storedToken);
-        checkAuth(storedToken);
-      } else {
-        setLoading(false);
-      }
-    };
+    setAccessTokenFetcher(getAccessToken);
+    return () => setAccessTokenFetcher(null);
+  }, [getAccessToken]);
 
-    validateAndLoadToken();
-  }, []);
+  const fetchUser = useCallback(async () => {
+    if (!ready) {
+      return;
+    }
 
-  const checkAuth = async (authToken?: string) => {
-    const tokenToUse = authToken || token;
-    if (!tokenToUse) {
+    if (!privyAuthenticated) {
       setUser(null);
       setLoading(false);
       return;
     }
 
+    setLoading(true);
     try {
-      // Try to get user data from backend
-      // Backend will verify token (either Privy access token or our custom JWT)
-      const response = await authApi.getMe(tokenToUse);
+      const response = await authApi.getMe();
       setUser(response.data.user);
-      // Token is valid, keep it
-      if (tokenToUse && tokenToUse !== token) {
-        setToken(tokenToUse);
-        localStorage.setItem("privy_token", tokenToUse);
-      }
     } catch (error: any) {
-      // Token invalid or expired, clear it
-      console.error("Auth check failed:", error?.message || error);
-      // Only clear token if it's actually an auth error (401)
-      if (error?.response?.status === 401 || error?.message?.includes("401")) {
-        setToken(null);
+      const status = error?.response?.status;
+      if (status === 401) {
         setUser(null);
-        localStorage.removeItem("privy_token");
+      } else {
+        console.error("Auth fetch failed:", error);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [privyAuthenticated, ready]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    fetchUser();
+  }, [fetchUser, ready]);
 
   const signup = async (email: string, name?: string) => {
     try {
-      const response = await authApi.signup(email, name);
-      // Backend creates user in Privy and returns user data
-      setUser(response.data.user);
-      // If backend returns a token, store it
-      if (response.data.token) {
-        setToken(response.data.token);
-        localStorage.setItem("privy_token", response.data.token);
-      }
+      await authApi.signup(email, name);
+      await fetchUser();
     } catch (error: any) {
       throw error;
     }
   };
 
-  const signin = async (email: string, privyToken?: string, name?: string) => {
+  const signin = async (email: string, privyToken: string, name?: string) => {
     try {
-      const response = await authApi.signin(email, privyToken, name);
-      setUser(response.data.user);
-      if (response.data.token) {
-        setToken(response.data.token);
-        localStorage.setItem("privy_token", response.data.token);
-      }
+      await authApi.signin(email, privyToken, name);
+      await fetchUser();
     } catch (error: any) {
       throw error;
     }
@@ -142,29 +98,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
+      try {
+        await logout();
+      } catch (privyError) {
+        console.error("Error logging out of Privy:", privyError);
+      }
       setUser(null);
-      setToken(null);
-      localStorage.removeItem("privy_token");
+      setLoading(false);
     }
   };
 
   const refreshUser = async () => {
-    if (token) {
-      await checkAuth(token);
-    }
-  };
-
-  const handleSetToken = async (newToken: string | null) => {
-    setToken(newToken);
-    if (newToken) {
-      localStorage.setItem("privy_token", newToken);
-      setLoading(true); // Set loading while checking auth
-      await checkAuth(newToken);
-    } else {
-      localStorage.removeItem("privy_token");
-      setUser(null);
-      setLoading(false);
-    }
+    await fetchUser();
   };
 
   return (
@@ -172,13 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        authenticated: !!user && !!token,
-        token,
+        authenticated: !!user,
         signup,
         signin,
         signout,
         refreshUser,
-        setToken: handleSetToken,
       }}
     >
       {children}

@@ -13,18 +13,15 @@ export const authKeys = {
 
 // Get current user query
 export function useGetMe() {
-  const { token } = useAuthContext();
+  const { loading, authenticated } = useAuthContext();
 
   return useQuery({
     queryKey: authKeys.user(),
     queryFn: async () => {
-      if (!token) {
-        throw new Error("No token available");
-      }
-      const response = await authApi.getMe(token);
+      const response = await authApi.getMe();
       return response.data.user;
     },
-    enabled: !!token,
+    enabled: !loading && authenticated,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -57,11 +54,11 @@ export function useSignin() {
   return useMutation({
     mutationFn: ({
       email,
-      privyToken = "",
+      privyToken,
       name,
     }: {
       email: string;
-      privyToken?: string;
+      privyToken: string;
       name?: string;
     }) => signin(email, privyToken, name),
     onSuccess: () => {

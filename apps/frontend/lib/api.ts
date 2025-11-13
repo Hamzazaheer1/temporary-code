@@ -42,28 +42,19 @@ export const authApi = {
 
   signin: async (
     email: string,
-    privyToken?: string,
+    privyToken: string,
     name?: string
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>("/api/auth/signin", {
       email,
-      privyToken: privyToken || undefined,
+      privyToken,
       name: name || undefined,
     });
     return response.data;
   },
 
-  getMe: async (token?: string): Promise<MeResponse> => {
-    // If token is provided, use it; otherwise axios interceptor will add it from localStorage
-    const config = token
-      ? {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      : {}; // Empty config - axios interceptor will handle it
-
-    const response = await apiClient.get<MeResponse>("/api/auth/me", config);
+  getMe: async (): Promise<MeResponse> => {
+    const response = await apiClient.get<MeResponse>("/api/auth/me");
     return response.data;
   },
 

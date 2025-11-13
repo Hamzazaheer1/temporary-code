@@ -12,7 +12,6 @@ config({ path: join(__dirname, "../.env") });
 const privy = new PrivyClient({
   appId: process.env.PRIVY_APP_ID,
   appSecret: process.env.PRIVY_APP_SECRET,
-  jwtVerificationKey: process.env.PRIVY_JWT_VERIFICATION_KEY,
 });
 
 export { privy, APIError, PrivyAPIError };
