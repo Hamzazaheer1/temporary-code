@@ -645,17 +645,3 @@ export const signout = async (req, res) => {
     });
   }
 };
-n", cookieOptions);
-
-    res.status(200).json({
-      success: true,
-      message: "Signed out successfully",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error signing out",
-      error: error.message,
-    });
-  }
-};
