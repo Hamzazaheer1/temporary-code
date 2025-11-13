@@ -235,9 +235,25 @@ export const signin = async (req, res) => {
       // Debug: Log before verification
       console.log("========== PRIVY TOKEN VERIFICATION START ==========");
       console.log("Privy App ID:", process.env.PRIVY_APP_ID ? "SET ✓" : "NOT SET ✗");
+      console.log("Privy App ID Value:", process.env.PRIVY_APP_ID?.substring(0, 20) + "...");
       console.log("Privy App Secret:", process.env.PRIVY_APP_SECRET ? "SET ✓" : "NOT SET ✗");
       console.log("Token Length:", normalizedToken.length);
       console.log("Token Preview:", normalizedToken.substring(0, 30) + "...");
+      
+      // Decode JWT to check issuer (without verification)
+      try {
+        const tokenParts = normalizedToken.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          console.log("Token Issuer (iss):", payload.iss || "N/A");
+          console.log("Token Audience (aud):", payload.aud || "N/A");
+          console.log("Token Expiry:", payload.exp ? new Date(payload.exp * 1000).toISOString() : "N/A");
+          console.log("Token Issued At:", payload.iat ? new Date(payload.iat * 1000).toISOString() : "N/A");
+          console.log("Is Token Expired:", payload.exp ? Date.now() > payload.exp * 1000 : "Unknown");
+        }
+      } catch (decodeError) {
+        console.warn("Could not decode token payload:", decodeError.message);
+      }
       
       // Verify the Privy access token
       const verifiedClaims = await privy
@@ -489,9 +505,27 @@ export const signin = async (req, res) => {
       console.error("Error Status:", verifyError.status || "N/A");
       console.error("Full Error:", JSON.stringify(verifyError, Object.getOwnPropertyNames(verifyError)));
       console.error("Privy App ID Set:", !!process.env.PRIVY_APP_ID);
+      console.error("Privy App ID Value:", process.env.PRIVY_APP_ID?.substring(0, 20) + "...");
       console.error("Privy App Secret Set:", !!process.env.PRIVY_APP_SECRET);
       console.error("Token Length:", normalizedToken?.length || 0);
       console.error("Token First 20 chars:", normalizedToken?.substring(0, 20) || "N/A");
+      
+      // Try to decode token to check if it's expired or wrong issuer
+      try {
+        const tokenParts = normalizedToken?.split('.');
+        if (tokenParts && tokenParts.length === 3) {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          console.error("Token Issuer (iss):", payload.iss || "N/A");
+          console.error("Token Audience (aud):", payload.aud || "N/A");
+          console.error("Token Expiry:", payload.exp ? new Date(payload.exp * 1000).toISOString() : "N/A");
+          console.error("Is Token Expired:", payload.exp ? Date.now() > payload.exp * 1000 : "Unknown");
+          console.error("Expected App ID:", process.env.PRIVY_APP_ID);
+          console.error("Token Issuer Match:", payload.iss?.includes(process.env.PRIVY_APP_ID) ? "YES ✓" : "NO ✗");
+        }
+      } catch (decodeError) {
+        console.error("Could not decode token for debugging:", decodeError.message);
+      }
+      
       console.error("==================================================");
       
       return res.status(401).json({
@@ -598,6 +632,20 @@ export const signout = async (req, res) => {
     };
     res.clearCookie("token", cookieOptions);
     res.clearCookie("privy-token", cookieOptions);
+
+    res.status(200).json({
+      success: true,
+      message: "Signed out successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error signing out",
+      error: error.message,
+    });
+  }
+};
+n", cookieOptions);
 
     res.status(200).json({
       success: true,
