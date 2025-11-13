@@ -2,6 +2,16 @@ import { privy } from "../services/privy.js";
 
 export const protect = async (req, res, next) => {
   try {
+    // Check if Privy is properly configured
+    if (!privy) {
+      console.error("Privy client not initialized - check environment variables");
+      return res.status(500).json({
+        success: false,
+        message: "Server configuration error: Privy not configured",
+        error: "PRIVY_APP_ID or PRIVY_APP_SECRET is missing or invalid",
+      });
+    }
+
     const headerToken = req.headers.authorization || "";
     const bearerToken = headerToken.startsWith("Bearer ")
       ? headerToken.slice(7)
