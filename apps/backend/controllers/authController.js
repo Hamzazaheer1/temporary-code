@@ -232,16 +232,6 @@ export const signin = async (req, res) => {
         });
       }
 
-      // Check if Privy is properly configured
-      if (!privy) {
-        console.error("Privy client not initialized - check environment variables");
-        return res.status(500).json({
-          success: false,
-          message: "Server configuration error: Privy not configured",
-          error: "PRIVY_APP_ID or PRIVY_APP_SECRET is missing or invalid. Please check your server environment variables.",
-        });
-      }
-
       // Verify the Privy access token
       const verifiedClaims = await privy
         .utils()
