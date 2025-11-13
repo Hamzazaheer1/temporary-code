@@ -232,11 +232,87 @@ export const signin = async (req, res) => {
         });
       }
 
+      // Decode JWT token to check App ID mismatch
+      let payload = null;
+      try {
+        const tokenParts = normalizedToken.split('.');
+        if (tokenParts.length >= 2) {
+          payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          console.log("=== TOKEN DECODED ===");
+          console.log("Token App ID (aud):", payload.aud || "NOT FOUND");
+          console.log("Token issuer (iss):", payload.iss || "NOT FOUND");
+          console.log("Token subject (sub):", payload.sub || "NOT FOUND");
+          console.log("Token expires (exp):", payload.exp ? new Date(payload.exp * 1000).toISOString() : "NOT FOUND");
+          console.log("Token issued (iat):", payload.iat ? new Date(payload.iat * 1000).toISOString() : "NOT FOUND");
+          console.log("Backend PRIVY_APP_ID:", process.env.PRIVY_APP_ID || "NOT SET");
+          console.log("Token App ID matches Backend:", payload.aud === process.env.PRIVY_APP_ID ? "✅ YES" : "❌ NO");
+          if (payload.aud !== process.env.PRIVY_APP_ID) {
+            console.log("⚠️ APP ID MISMATCH DETECTED!");
+            console.log("   Token expects App ID:", payload.aud);
+            console.log("   Backend has App ID:", process.env.PRIVY_APP_ID);
+          }
+          console.log("=== END TOKEN DECODE ===");
+        }
+      } catch (decodeErr) {
+        console.log("Could not decode token:", decodeErr.message);
+      }
+
       // Verify the Privy access token
-      const verifiedClaims = await privy
-        .utils()
-        .auth()
-        .verifyAuthToken(normalizedToken);
+      let verifiedClaims;
+      try {
+        console.log("=== TOKEN VERIFICATION START ===");
+        console.log("Token length:", normalizedToken.length);
+        console.log("Token prefix:", normalizedToken.substring(0, 50) + "...");
+        console.log("Backend PRIVY_APP_ID:", process.env.PRIVY_APP_ID ? "***" + process.env.PRIVY_APP_ID.slice(-4) : "NOT SET");
+        console.log("Backend PRIVY_APP_SECRET:", process.env.PRIVY_APP_SECRET ? "SET (length: " + process.env.PRIVY_APP_SECRET.length + ")" : "NOT SET");
+        console.log("Privy client exists:", !!privy);
+        
+        // Try to test Privy client by getting user info (this will fail if App Secret is wrong)
+        if (payload && payload.sub) {
+          try {
+            const testUserId = payload.sub;
+            console.log("Testing Privy client with user ID:", testUserId);
+            await privy.users().get(testUserId);
+            console.log("✅ Privy client test PASSED - App Secret is correct");
+          } catch (testErr) {
+            console.log("⚠️ Privy client test FAILED:");
+            console.log("   Error:", testErr.message);
+            if (testErr.message?.includes("Invalid") || testErr.message?.includes("unauthorized") || testErr.message?.includes("403")) {
+              console.log("   ⚠️ This suggests PRIVY_APP_SECRET might be incorrect!");
+              console.log("   Please verify PRIVY_APP_SECRET in Privy Dashboard matches your .env file");
+            }
+          }
+        }
+        
+        verifiedClaims = await privy
+          .utils()
+          .auth()
+          .verifyAuthToken(normalizedToken);
+        
+        console.log("✅ Token verification SUCCESS");
+      } catch (verifyErr) {
+        console.log("❌ Token verification FAILED");
+        console.log("Error name:", verifyErr.name);
+        console.log("Error message:", verifyErr.message);
+        console.log("Error type:", verifyErr.constructor.name);
+        
+        // Check if it's a signature verification error
+        if (verifyErr.message?.includes("signature") || verifyErr.message?.includes("verification")) {
+          console.log("⚠️ SIGNATURE VERIFICATION ERROR - Possible causes:");
+          console.log("   1. PRIVY_APP_SECRET is incorrect");
+          console.log("   2. PRIVY_APP_SECRET has extra spaces or quotes");
+          console.log("   3. Network issue fetching JWKS from Privy");
+          console.log("   Solution: Verify PRIVY_APP_SECRET in Privy Dashboard");
+        }
+        
+        console.log("Backend PRIVY_APP_ID:", process.env.PRIVY_APP_ID ? "***" + process.env.PRIVY_APP_ID.slice(-4) : "NOT SET");
+        console.log("Backend PRIVY_APP_SECRET:", process.env.PRIVY_APP_SECRET ? "SET (length: " + process.env.PRIVY_APP_SECRET.length + ")" : "NOT SET");
+        console.log("Token length:", normalizedToken?.length || "N/A");
+        console.log("Token prefix:", normalizedToken?.substring(0, 50) || "N/A");
+        console.log("Full error:", verifyErr);
+        console.log("=== END VERIFICATION ERROR ===");
+        throw verifyErr;
+      }
 
       // Log the entire verified claims object for debugging
       console.log(
