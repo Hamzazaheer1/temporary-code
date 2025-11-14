@@ -1,3 +1,193 @@
+import { privy, APIError, PrivyAPIError } from "../services/privy.js";
+import User from "../models/User.js";
+
+// @desc    Register a new user
+// @route   POST /api/auth/signup
+// @access  Public
+export const signup = async (req, res) => {
+  try {
+    const { email, name } = req.body;
+
+    // Validation
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide email",
+      });
+    }
+
+    // Check if user already exists in our database
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      // User exists, check if they have privyUserId
+      if (!existingUser.privyUserId) {
+        // User exists but doesn't have privyUserId - create Privy user and update record
+        if (process.env.NODE_ENV === "development") {
+          console.log("Updating existing user with missing privyUserId...");
+        }
+        try {
+          // Create user in Privy
+          const privyUser = await privy.users().create({
+            linked_accounts: [
+              {
+                type: "email",
+                address: email,
+              },
+            ],
+          });
+
+          // Create wallet for the user if they don't have one
+          let wallet = null;
+          try {
+            const createdWallet = await privy.wallets().create({
+              chain_type: "stellar",
+              owner: { user_id: privyUser.id },
+            });
+            wallet = {
+              id: createdWallet.id,
+              address: createdWallet.address,
+              chain_type: createdWallet.chain_type,
+            };
+          } catch (walletError) {
+            console.warn("Wallet creation failed:", walletError);
+          }
+
+          // Update existing user record with privyUserId and wallet
+          existingUser.privyUserId = privyUser.id;
+          if (name && !existingUser.name) {
+            existingUser.name = name;
+          }
+          if (wallet?.address && !existingUser.walletAddress) {
+            existingUser.walletAddress = wallet.address;
+            existingUser.walletId = wallet.id;
+          }
+          await existingUser.save();
+
+          return res.status(200).json({
+            success: true,
+            message: "User account updated successfully",
+            data: {
+              user: {
+                id: privyUser.id,
+                email: existingUser.email,
+                name: existingUser.name || name || "",
+                walletAddress:
+                  existingUser.walletAddress || wallet?.address || null,
+                createdAt: existingUser.createdAt,
+              },
+              ...(wallet && { wallet }),
+            },
+          });
+        } catch (privyError) {
+          console.error(
+            "Error creating Privy user for existing user:",
+            privyError
+          );
+          return res.status(500).json({
+            success: false,
+            message: "Error updating user account",
+            error: privyError.message,
+          });
+        }
+      }
+      // User exists, generate token and return
+      return res.status(200).json({
+        success: true,
+        message: "User already exists",
+        data: {
+          user: {
+            id: existingUser.privyUserId,
+            email: existingUser.email,
+            name: existingUser.name || "",
+            walletAddress: existingUser.walletAddress || null,
+            createdAt: existingUser.createdAt,
+          },
+        },
+      });
+    }
+
+    // Create user in Privy
+    const user = await privy.users().create({
+      linked_accounts: [
+        {
+          type: "email",
+          address: email,
+        },
+      ],
+    });
+
+    // Optionally create a wallet for the user
+    let wallet = null;
+    try {
+      const createdWallet = await privy.wallets().create({
+        chain_type: "stellar",
+        owner: { user_id: user.id },
+      });
+      wallet = {
+        id: createdWallet.id,
+        address: createdWallet.address,
+        chain_type: createdWallet.chain_type,
+      };
+    } catch (walletError) {
+      // Wallet creation is optional, continue even if it fails
+      console.warn("Wallet creation failed:", walletError);
+    }
+
+    // Store email -> Privy user ID mapping in MongoDB
+    await User.create({
+      email,
+      privyUserId: user.id,
+      name: name || "",
+      walletAddress: wallet?.address || null,
+      walletId: wallet?.id || null,
+    });
+
+    // Generate JWT token with Privy user ID
+    if (!user || !user.id) {
+      return res.status(500).json({
+        success: false,
+        message: "Error creating user in Privy",
+        error: "Privy user ID is missing",
+      });
+    }
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: {
+        user: {
+          id: user.id,
+          email:
+            user.linked_accounts?.find((acc) => acc.type === "email")
+              ?.address || email,
+          name: name || "",
+          walletAddress: wallet?.address || null,
+          createdAt: user.created_at,
+        },
+        wallet,
+      },
+    });
+  } catch (error) {
+    if (error instanceof APIError) {
+      return res.status(error.status || 400).json({
+        success: false,
+        message: error.message || "Error creating user",
+        error: error.name,
+      });
+    } else if (error instanceof PrivyAPIError) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Error creating user",
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: "Error creating user",
+        error: error.message,
+      });
+    }
+  }
+};
+
 // @desc Sign in user
 // @route POST /api/auth/signin
 // @access Public
