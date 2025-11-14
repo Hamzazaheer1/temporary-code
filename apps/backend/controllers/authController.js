@@ -485,3 +485,91 @@ async function getOrCreateWallet(privyUserId) {
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+// @desc    Get current user
+// @route   GET /api/auth/me
+// @access  Private
+export const getMe = async (req, res) => {
+  try {
+    // req.user is set by middleware after verifying the Privy access token
+    const privyUserId = req.user?.privyId || req.user?.privyUserId;
+
+    if (!privyUserId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    // Get user record from our database
+    const userRecord = await User.findOne({ privyUserId });
+
+    if (!userRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: privyUserId,
+          email: userRecord.email,
+          name: userRecord.name || "",
+          walletAddress: userRecord.walletAddress || null,
+          createdAt: userRecord.createdAt,
+          updatedAt: userRecord.updatedAt,
+        },
+      },
+    });
+  } catch (error) {
+    if (error instanceof APIError) {
+      return res.status(error.status || 401).json({
+        success: false,
+        message: error.message || "Error fetching user",
+        error: error.name,
+      });
+    } else if (error instanceof PrivyAPIError) {
+      return res.status(401).json({
+        success: false,
+        message: error.message || "Error fetching user",
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: "Error fetching user",
+        error: error.message,
+      });
+    }
+  }
+};
+
+// @desc    Sign out user
+// @route   POST /api/auth/signout
+// @access  Private
+export const signout = async (req, res) => {
+  try {
+    // Clear both cookie names
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+      path: "/",
+    };
+    res.clearCookie("token", cookieOptions);
+    res.clearCookie("privy-token", cookieOptions);
+
+    res.status(200).json({
+      success: true,
+      message: "Signed out successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error signing out",
+      error: error.message,
+    });
+  }
+};
