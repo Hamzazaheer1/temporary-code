@@ -1,12 +1,10 @@
-import { privy, APIError, PrivyAPIError } from "../services/privy.js";
-import User from "../models/User.js";
+// @desc Sign in user
+// @route POST /api/auth/signin
+// @access Public
 
-// @desc    Register a new user
-// @route   POST /api/auth/signup
-// @access  Public
-export const signup = async (req, res) => {
+export const signin = async (req, res) => {
   try {
-    const { email, name } = req.body;
+    const { email, privyToken, name } = req.body;
 
     // Validation
     if (!email) {
@@ -16,517 +14,60 @@ export const signup = async (req, res) => {
       });
     }
 
-    // Check if user already exists in our database
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      // User exists, check if they have privyUserId
-      if (!existingUser.privyUserId) {
-        // User exists but doesn't have privyUserId - create Privy user and update record
-        if (process.env.NODE_ENV === "development") {
-          console.log("Updating existing user with missing privyUserId...");
-        }
-        try {
-          // Create user in Privy
-          const privyUser = await privy.users().create({
-            linked_accounts: [
-              {
-                type: "email",
-                address: email,
-              },
-            ],
-          });
-
-          // Create wallet for the user if they don't have one
-          let wallet = null;
-          try {
-            const createdWallet = await privy.wallets().create({
-              chain_type: "stellar",
-              owner: { user_id: privyUser.id },
-            });
-            wallet = {
-              id: createdWallet.id,
-              address: createdWallet.address,
-              chain_type: createdWallet.chain_type,
-            };
-          } catch (walletError) {
-            console.warn("Wallet creation failed:", walletError);
-          }
-
-          // Update existing user record with privyUserId and wallet
-          existingUser.privyUserId = privyUser.id;
-          if (name && !existingUser.name) {
-            existingUser.name = name;
-          }
-          if (wallet?.address && !existingUser.walletAddress) {
-            existingUser.walletAddress = wallet.address;
-            existingUser.walletId = wallet.id;
-          }
-          await existingUser.save();
-
-          return res.status(200).json({
-            success: true,
-            message: "User account updated successfully",
-            data: {
-              user: {
-                id: privyUser.id,
-                email: existingUser.email,
-                name: existingUser.name || name || "",
-                walletAddress:
-                  existingUser.walletAddress || wallet?.address || null,
-                createdAt: existingUser.createdAt,
-              },
-              ...(wallet && { wallet }),
-            },
-          });
-        } catch (privyError) {
-          console.error(
-            "Error creating Privy user for existing user:",
-            privyError
-          );
-          return res.status(500).json({
-            success: false,
-            message: "Error updating user account",
-            error: privyError.message,
-          });
-        }
-      }
-      // User exists, generate token and return
-      return res.status(200).json({
-        success: true,
-        message: "User already exists",
-        data: {
-          user: {
-            id: existingUser.privyUserId,
-            email: existingUser.email,
-            name: existingUser.name || "",
-            walletAddress: existingUser.walletAddress || null,
-            createdAt: existingUser.createdAt,
-          },
-        },
-      });
-    }
-
-    // Create user in Privy
-    const user = await privy.users().create({
-      linked_accounts: [
-        {
-          type: "email",
-          address: email,
-        },
-      ],
-    });
-
-    // Optionally create a wallet for the user
-    let wallet = null;
-    try {
-      const createdWallet = await privy.wallets().create({
-        chain_type: "stellar",
-        owner: { user_id: user.id },
-      });
-      wallet = {
-        id: createdWallet.id,
-        address: createdWallet.address,
-        chain_type: createdWallet.chain_type,
-      };
-    } catch (walletError) {
-      // Wallet creation is optional, continue even if it fails
-      console.warn("Wallet creation failed:", walletError);
-    }
-
-    // Store email -> Privy user ID mapping in MongoDB
-    await User.create({
-      email,
-      privyUserId: user.id,
-      name: name || "",
-      walletAddress: wallet?.address || null,
-      walletId: wallet?.id || null,
-    });
-
-    // Generate JWT token with Privy user ID
-    if (!user || !user.id) {
-      return res.status(500).json({
-        success: false,
-        message: "Error creating user in Privy",
-        error: "Privy user ID is missing",
-      });
-    }
-    res.status(201).json({
-      success: true,
-      message: "User created successfully",
-      data: {
-        user: {
-          id: user.id,
-          email:
-            user.linked_accounts?.find((acc) => acc.type === "email")
-              ?.address || email,
-          name: name || "",
-          walletAddress: wallet?.address || null,
-          createdAt: user.created_at,
-        },
-        wallet,
-      },
-    });
-  } catch (error) {
-    if (error instanceof APIError) {
-      return res.status(error.status || 400).json({
-        success: false,
-        message: error.message || "Error creating user",
-        error: error.name,
-      });
-    } else if (error instanceof PrivyAPIError) {
-      return res.status(400).json({
-        success: false,
-        message: error.message || "Error creating user",
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: "Error creating user",
-        error: error.message,
-      });
-    }
-  }
-};
-
-// @desc    Sign in user
-// @route   POST /api/auth/signin
-// @access  Public
-export const signin = async (req, res) => {
-  try {
-    const { email, privyToken, name } = req.body;
-
+    // Privy token is required for authentication
     if (!privyToken) {
       return res.status(400).json({
         success: false,
-        message: "Privy access token is required",
+        message: "Authentication token is required",
       });
     }
 
+    // Verify the Privy access token
+    let verifiedClaims;
     try {
-      const trimmedToken =
-        typeof privyToken === "string" ? privyToken.trim() : "";
+      verifiedClaims = await privy.utils().auth().verifyAuthToken(privyToken);
+      console.log("Token verified for user:", verifiedClaims.user_id);
+    } catch (verifyError) {
+      console.error("Token verification failed:", verifyError.message);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired authentication token",
+        error: process.env.NODE_ENV === "development" ? verifyError.message : undefined,
+      });
+    }
 
-      if (!trimmedToken) {
-        console.error("Privy token was provided but empty after trimming");
-        return res.status(401).json({
-          success: false,
-          message: "Invalid token: token is empty",
-        });
-      }
-
-      const bearerPrefixMatch = /^Bearer\s+/i;
-      const normalizedToken = trimmedToken.replace(bearerPrefixMatch, "");
-
-      if (normalizedToken !== trimmedToken) {
-        console.log("Removed Bearer prefix from provided Privy token");
-      }
-
-      if (!normalizedToken || normalizedToken.includes(" ")) {
-        console.error("Normalized Privy token is invalid", {
-          hasSpace: normalizedToken?.includes(" "),
-          length: normalizedToken?.length,
-        });
-        return res.status(401).json({
-          success: false,
-          message: "Invalid token format",
-        });
-      }
-
-      // Verify the Privy access token
-      const verifiedClaims = await privy
-        .utils()
-        .auth()
-        .verifyAuthToken(normalizedToken);
-
-      // Log the entire verified claims object for debugging
-      console.log(
-        "Full verified claims from Privy token:",
+    // Extract Privy user ID from verified claims
+    const privyUserId = extractPrivyUserId(verifiedClaims);
+    if (!privyUserId) {
+      console.error(
+        "No user ID found in verified claims:",
         JSON.stringify(verifiedClaims, null, 2)
       );
-      console.log("Verified claims keys:", Object.keys(verifiedClaims));
-
-      // Get the Privy user ID - Privy's verifyAuthToken returns user_id (with underscore)
-      // Based on the logs, Privy returns: { user_id: "did:privy:...", ... }
-      const privyUserId =
-        verifiedClaims.user_id || // Privy uses user_id (with underscore)
-        verifiedClaims.userId || // Fallback to camelCase
-        verifiedClaims.sub || // JWT standard sub field
-        verifiedClaims.id ||
-        (verifiedClaims.user && verifiedClaims.user.id) ||
-        (typeof verifiedClaims === "string" ? verifiedClaims : null);
-
-      if (!privyUserId) {
-        console.error(
-          "No user ID found in verified claims. Full object:",
-          JSON.stringify(verifiedClaims, null, 2)
-        );
-        return res.status(401).json({
-          success: false,
-          message: "Invalid token: missing user ID",
-          error: `Token verification failed - no user ID found. Claims: ${JSON.stringify(
-            verifiedClaims
-          )}`,
-        });
-      }
-
-      console.log("Looking up user with privyUserId:", privyUserId);
-
-      // Find user in our database by Privy user ID
-      // The privyUserId should match exactly what's stored in the database
-      let userRecord = await User.findOne({
-        privyUserId: privyUserId,
-      });
-
-      // If not found, try with the full DID format (if it's not already)
-      if (!userRecord && !privyUserId.startsWith("did:privy:")) {
-        console.log("Trying with did:privy: prefix");
-        userRecord = await User.findOne({
-          privyUserId: `did:privy:${privyUserId}`,
-        });
-      }
-
-      // If still not found, try without the prefix
-      if (!userRecord && privyUserId.startsWith("did:privy:")) {
-        const userIdWithoutPrefix = privyUserId.replace("did:privy:", "");
-        console.log("Trying without did:privy: prefix:", userIdWithoutPrefix);
-        userRecord = await User.findOne({
-          privyUserId: userIdWithoutPrefix,
-        });
-      }
-
-      if (!userRecord) {
-        // Also try a case-insensitive search as a last resort
-        const allUsers = await User.find({});
-        const matchingUser = allUsers.find(
-          (u) =>
-            u.privyUserId &&
-            u.privyUserId.toLowerCase() === privyUserId.toLowerCase()
-        );
-
-        if (matchingUser) {
-          console.log("Found user with case-insensitive match");
-          userRecord = matchingUser;
-        }
-        // If still not found, we'll create the user below (don't return error here)
-      }
-
-      // If user not found in database, create them
-      // This happens when user signs up via Privy OTP (Privy creates user, but we haven't created DB record yet)
-      if (!userRecord) {
-        console.log("User not found in database, creating new user record...");
-
-        // Get user email from Privy or use the email from request
-        const normalizeEmail = (value) =>
-          typeof value === "string" ? value.toLowerCase().trim() : "";
-
-        let userEmail = normalizeEmail(email);
-        try {
-          // Try to get user info from Privy
-          const privyUser = await privy.users().get(privyUserId);
-          if (privyUser && privyUser.linked_accounts) {
-            const emailAccount = privyUser.linked_accounts.find(
-              (acc) => acc.type === "email"
-            );
-            if (emailAccount && emailAccount.address) {
-              userEmail = normalizeEmail(emailAccount.address);
-            }
-          }
-        } catch (privyError) {
-          console.warn(
-            "Could not fetch user from Privy, using email from request:",
-            privyError
-          );
-        }
-
-        if (!userEmail) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Unable to determine user email from Privy token. Please ensure the account has an email linked.",
-          });
-        }
-
-        // Create wallet for the new user
-        let wallet = null;
-        try {
-          const createdWallet = await privy.wallets().create({
-            chain_type: "stellar",
-            owner: { user_id: privyUserId },
-          });
-          wallet = {
-            id: createdWallet.id,
-            address: createdWallet.address,
-            chain_type: createdWallet.chain_type,
-          };
-        } catch (walletError) {
-          console.warn("Wallet creation failed:", walletError);
-          // Try to get existing wallet if creation fails
-          try {
-            const wallets = await privy
-              .wallets()
-              .list({ owner: { user_id: privyUserId } });
-            if (wallets && wallets.length > 0) {
-              wallet = {
-                id: wallets[0].id,
-                address: wallets[0].address,
-                chain_type: wallets[0].chain_type,
-              };
-            }
-          } catch (listError) {
-            console.warn("Could not list wallets:", listError);
-          }
-        }
-
-        // Check if user with this email already exists (edge case)
-        const existingUserByEmail = userEmail
-          ? await User.findOne({
-              email: userEmail,
-            })
-          : null;
-
-        if (existingUserByEmail) {
-          // User exists by email but different privyUserId - update it
-          console.log("User exists by email, updating privyUserId...");
-          existingUserByEmail.privyUserId = privyUserId;
-          if (name && !existingUserByEmail.name) {
-            existingUserByEmail.name = name;
-          }
-          if (wallet?.address && !existingUserByEmail.walletAddress) {
-            existingUserByEmail.walletAddress = wallet.address;
-            existingUserByEmail.walletId = wallet.id;
-          }
-          await existingUserByEmail.save();
-          userRecord = existingUserByEmail;
-          console.log("Updated existing user with new privyUserId:", {
-            email: userRecord.email,
-            privyUserId: userRecord.privyUserId,
-          });
-        } else {
-          // Create new user record in our database
-          try {
-            userRecord = await User.create({
-              email: userEmail,
-              privyUserId: privyUserId,
-              name: name || "", // Use name from request if provided (from signup page)
-              walletAddress: wallet?.address || null,
-              walletId: wallet?.id || null,
-            });
-
-            console.log("New user created in database:", {
-              email: userRecord.email,
-              privyUserId: userRecord.privyUserId,
-              name: userRecord.name,
-              walletAddress: userRecord.walletAddress,
-            });
-          } catch (createError) {
-            console.error("Error creating user in database:", createError);
-            // If creation fails due to duplicate, try to find the user
-            if (
-              createError.code === 11000 ||
-              createError.message?.includes("duplicate")
-            ) {
-              const orConditions = [{ privyUserId: privyUserId }];
-              if (userEmail) {
-                orConditions.push({ email: userEmail });
-              }
-
-              userRecord = await User.findOne({
-                $or: orConditions,
-              });
-              if (userRecord) {
-                console.log(
-                  "Found user after duplicate error:",
-                  userRecord.email
-                );
-              } else {
-                throw createError;
-              }
-            } else {
-              throw createError;
-            }
-          }
-        }
-      } else {
-        console.log("User found:", {
-          email: userRecord.email,
-          privyUserId: userRecord.privyUserId,
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message:
-          userRecord.createdAt &&
-          new Date(userRecord.createdAt).getTime() > Date.now() - 5000
-            ? "Account created and signed in successfully"
-            : "Signed in successfully",
-        data: {
-          user: {
-            id: privyUserId,
-            email: userRecord.email,
-            name: userRecord.name || "",
-            walletAddress: userRecord.walletAddress || null,
-            createdAt: userRecord.createdAt,
-          },
-        },
-      });
-    } catch (verifyError) {
-      console.error("Error verifying Privy token:", verifyError);
       return res.status(401).json({
         success: false,
-        message: "Invalid or expired token",
-        error: verifyError.message,
-      });
-    }
-  } catch (error) {
-    if (error instanceof APIError) {
-      return res.status(error.status || 401).json({
-        success: false,
-        message: error.message || "Error signing in",
-        error: error.name,
-      });
-    } else if (error instanceof PrivyAPIError) {
-      return res.status(401).json({
-        success: false,
-        message: error.message || "Error signing in",
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: "Error signing in",
-        error: error.message,
-      });
-    }
-  }
-};
-
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
-export const getMe = async (req, res) => {
-  try {
-    // req.user is set by middleware after verifying the Privy access token
-    const privyUserId = req.user?.privyId || req.user?.privyUserId;
-
-    if (!privyUserId) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated",
+        message: "Invalid token: missing user identification",
       });
     }
 
-    // Get user record from our database
-    const userRecord = await User.findOne({ privyUserId });
+    // Find or create user in database
+    let userRecord = await findUserByPrivyId(privyUserId);
+    let isNewUser = false;
 
     if (!userRecord) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      console.log("User not found in database, creating new user record...");
+      userRecord = await createUserFromPrivy(privyUserId, email, name);
+      isNewUser = true;
     }
 
-    res.status(200).json({
+    // Generate JWT token
+    const token = generateToken(privyUserId);
+    setTokenCookie(res, token);
+
+    return res.status(200).json({
       success: true,
+      message: isNewUser
+        ? "Account created and signed in successfully"
+        : "Signed in successfully",
       data: {
         user: {
           id: privyUserId,
@@ -534,56 +75,223 @@ export const getMe = async (req, res) => {
           name: userRecord.name || "",
           walletAddress: userRecord.walletAddress || null,
           createdAt: userRecord.createdAt,
-          updatedAt: userRecord.updatedAt,
         },
+        token,
       },
     });
   } catch (error) {
+    console.error("Signin error:", error);
+
     if (error instanceof APIError) {
-      return res.status(error.status || 401).json({
+      return res.status(error.status || 500).json({
         success: false,
-        message: error.message || "Error fetching user",
-        error: error.name,
-      });
-    } else if (error instanceof PrivyAPIError) {
-      return res.status(401).json({
-        success: false,
-        message: error.message || "Error fetching user",
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: "Error fetching user",
-        error: error.message,
+        message: error.message || "Authentication failed",
+        error: process.env.NODE_ENV === "development" ? error.name : undefined,
       });
     }
-  }
-};
 
-// @desc    Sign out user
-// @route   POST /api/auth/signout
-// @access  Private
-export const signout = async (req, res) => {
-  try {
-    // Clear both cookie names
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
-      path: "/",
-    };
-    res.clearCookie("token", cookieOptions);
-    res.clearCookie("privy-token", cookieOptions);
+    if (error instanceof PrivyAPIError) {
+      return res.status(401).json({
+        success: false,
+        message: error.message || "Authentication failed",
+      });
+    }
 
-    res.status(200).json({
-      success: true,
-      message: "Signed out successfully",
-    });
-  } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Error signing out",
-      error: error.message,
+      message: "An error occurred during sign in",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
+
+// ============ Helper Functions ============
+
+/**
+ * Extracts the Privy user ID from verified token claims.
+ * Tries multiple possible field names for compatibility.
+ *
+ * @param {object} verifiedClaims - The verified JWT claims from Privy
+ * @returns {string|null} The Privy user ID or null if not found
+ */
+function extractPrivyUserId(verifiedClaims) {
+  return (
+    verifiedClaims.user_id || // Privy standard (snake_case)
+    verifiedClaims.userId ||   // camelCase fallback
+    verifiedClaims.sub ||      // JWT standard
+    verifiedClaims.id ||       // Simple id field
+    verifiedClaims.user?.id || // Nested user object
+    (typeof verifiedClaims === "string" ? verifiedClaims : null)
+  );
+}
+
+/**
+ * Finds a user by their Privy user ID, trying multiple format variations.
+ * Uses case-insensitive search and handles did:privy: prefix variations.
+ *
+ * @param {string} privyUserId - The Privy user ID to search for
+ * @returns {Promise<object|null>} The user record or null if not found
+ */
+async function findUserByPrivyId(privyUserId) {
+  // Build regex for case-insensitive search with optional did:privy: prefix
+  const userId = privyUserId.replace(/^did:privy:/i, "");
+  const searchPattern = new RegExp(`^(did:privy:)?${escapeRegex(userId)}$`, "i");
+
+  const userRecord = await User.findOne({
+    privyUserId: searchPattern,
+  });
+
+  return userRecord;
+}
+
+/**
+ * Creates a new user record from Privy authentication.
+ * Fetches user details from Privy API and creates a wallet.
+ *
+ * @param {string} privyUserId - The Privy user ID
+ * @param {string} fallbackEmail - Email from request body (fallback)
+ * @param {string} name - User's name (optional)
+ * @returns {Promise<object>} The created user record
+ */
+async function createUserFromPrivy(privyUserId, fallbackEmail, name) {
+  // Fetch user details from Privy
+  const userEmail = await fetchUserEmailFromPrivy(privyUserId, fallbackEmail);
+  
+  // Create or get wallet
+  const wallet = await getOrCreateWallet(privyUserId);
+
+  // Check if user exists by email (edge case: email exists, different privyUserId)
+  const existingUser = await User.findOne({
+    email: userEmail.toLowerCase().trim(),
+  });
+
+  if (existingUser) {
+    console.log("User exists by email, updating privyUserId...");
+    existingUser.privyUserId = privyUserId;
+    if (name && !existingUser.name) {
+      existingUser.name = name;
+    }
+    if (wallet?.address && !existingUser.walletAddress) {
+      existingUser.walletAddress = wallet.address;
+      existingUser.walletId = wallet.id;
+    }
+    await existingUser.save();
+    return existingUser;
+  }
+
+  // Create new user with upsert to prevent race conditions
+  try {
+    const userRecord = await User.create({
+      email: userEmail.toLowerCase().trim(),
+      privyUserId: privyUserId,
+      name: name || "",
+      walletAddress: wallet?.address || null,
+      walletId: wallet?.id || null,
+    });
+
+    console.log("New user created:", {
+      email: userRecord.email,
+      privyUserId: userRecord.privyUserId,
+      walletAddress: userRecord.walletAddress,
+    });
+
+    return userRecord;
+  } catch (createError) {
+    // Handle duplicate key errors (race condition)
+    if (createError.code === 11000 || createError.message?.includes("duplicate")) {
+      console.log("Duplicate detected, fetching existing user...");
+      const existingRecord = await User.findOne({
+        $or: [
+          { privyUserId: privyUserId },
+          { email: userEmail.toLowerCase().trim() },
+        ],
+      });
+      
+      if (existingRecord) {
+        return existingRecord;
+      }
+    }
+    
+    throw createError;
+  }
+}
+
+/**
+ * Fetches user's email from Privy API.
+ *
+ * @param {string} privyUserId - The Privy user ID
+ * @param {string} fallbackEmail - Fallback email if Privy fetch fails
+ * @returns {Promise<string>} The user's email address
+ */
+async function fetchUserEmailFromPrivy(privyUserId, fallbackEmail) {
+  try {
+    const privyUser = await privy.users().get(privyUserId);
+    
+    if (privyUser?.linked_accounts) {
+      const emailAccount = privyUser.linked_accounts.find(
+        (acc) => acc.type === "email"
+      );
+      
+      if (emailAccount?.address) {
+        return emailAccount.address;
+      }
+    }
+  } catch (error) {
+    console.warn("Could not fetch user from Privy:", error.message);
+  }
+
+  return fallbackEmail;
+}
+
+/**
+ * Gets existing wallet or creates a new Stellar wallet for the user.
+ *
+ * @param {string} privyUserId - The Privy user ID
+ * @returns {Promise<object|null>} Wallet object with id, address, chain_type
+ */
+async function getOrCreateWallet(privyUserId) {
+  try {
+    // Try to create new wallet
+    const createdWallet = await privy.wallets().create({
+      chain_type: "stellar",
+      owner: { user_id: privyUserId },
+    });
+
+    return {
+      id: createdWallet.id,
+      address: createdWallet.address,
+      chain_type: createdWallet.chain_type,
+    };
+  } catch (walletError) {
+    console.warn("Wallet creation failed, attempting to list existing wallets:", walletError.message);
+
+    // Try to get existing wallet
+    try {
+      const wallets = await privy.wallets().list({ 
+        owner: { user_id: privyUserId } 
+      });
+
+      if (wallets?.length > 0) {
+        return {
+          id: wallets[0].id,
+          address: wallets[0].address,
+          chain_type: wallets[0].chain_type,
+        };
+      }
+    } catch (listError) {
+      console.warn("Could not list wallets:", listError.message);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Escapes special regex characters in a string.
+ *
+ * @param {string} string - The string to escape
+ * @returns {string} The escaped string
+ */
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
