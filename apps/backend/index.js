@@ -9,8 +9,14 @@ import authRoutes from "./routes/authRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const MONGODB_URI =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/monique-powell";
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error(
+    "❌ MONGODB_URI is not defined. Please set it in your environment variables."
+  );
+  process.exit(1);
+}
 
 // Middleware
 app.use(express.json());
@@ -67,20 +73,25 @@ app.options(
   })
 );
 
-// MongoDB connection
-console.log(
-  "🔌 MongoDB connection target:",
-  MONGODB_URI ? MONGODB_URI.replace(/:\/\/.*@/, "://****:****@") : "undefined"
-);
+const maskConnectionString = (uri) =>
+  uri.replace(/(mongodb(?:\+srv)?:\/\/)(.*):(.*)@/, "$1****:****@");
 
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => {
+const connectToDatabase = async () => {
+  console.log(
+    "🔌 MongoDB connection target:",
+    maskConnectionString(MONGODB_URI)
+  );
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+    });
     console.log("✅ Connected to MongoDB");
-  })
-  .catch((error) => {
+  } catch (error) {
     console.error("❌ MongoDB connection error:", error);
-  });
+    process.exit(1);
+  }
+};
 
 // Routes
 app.get("/", (req, res) => {
@@ -151,7 +162,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running on http://localhost:${PORT}`);
-});
+const startServer = async () => {
+  await connectToDatabase();
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend running on http://localhost:${PORT}`);
+  });
+};
+
+startServer();
