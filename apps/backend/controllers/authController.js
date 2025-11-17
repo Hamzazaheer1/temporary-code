@@ -1,5 +1,6 @@
 import { privy, APIError, PrivyAPIError } from "../services/privy.js";
 import User from "../models/User.js";
+import { generateToken, setTokenCookie } from "../utils/token.js";
 
 // @desc    Register a new user
 // @route   POST /api/auth/signup
@@ -222,7 +223,10 @@ export const signin = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: "Invalid or expired authentication token",
-        error: process.env.NODE_ENV === "development" ? verifyError.message : undefined,
+        error:
+          process.env.NODE_ENV === "development"
+            ? verifyError.message
+            : undefined,
       });
     }
 
@@ -307,9 +311,9 @@ export const signin = async (req, res) => {
 function extractPrivyUserId(verifiedClaims) {
   return (
     verifiedClaims.user_id || // Privy standard (snake_case)
-    verifiedClaims.userId ||   // camelCase fallback
-    verifiedClaims.sub ||      // JWT standard
-    verifiedClaims.id ||       // Simple id field
+    verifiedClaims.userId || // camelCase fallback
+    verifiedClaims.sub || // JWT standard
+    verifiedClaims.id || // Simple id field
     verifiedClaims.user?.id || // Nested user object
     (typeof verifiedClaims === "string" ? verifiedClaims : null)
   );
@@ -325,7 +329,10 @@ function extractPrivyUserId(verifiedClaims) {
 async function findUserByPrivyId(privyUserId) {
   // Build regex for case-insensitive search with optional did:privy: prefix
   const userId = privyUserId.replace(/^did:privy:/i, "");
-  const searchPattern = new RegExp(`^(did:privy:)?${escapeRegex(userId)}$`, "i");
+  const searchPattern = new RegExp(
+    `^(did:privy:)?${escapeRegex(userId)}$`,
+    "i"
+  );
 
   const userRecord = await User.findOne({
     privyUserId: searchPattern,
@@ -346,7 +353,7 @@ async function findUserByPrivyId(privyUserId) {
 async function createUserFromPrivy(privyUserId, fallbackEmail, name) {
   // Fetch user details from Privy
   const userEmail = await fetchUserEmailFromPrivy(privyUserId, fallbackEmail);
-  
+
   // Create or get wallet
   const wallet = await getOrCreateWallet(privyUserId);
 
@@ -388,7 +395,10 @@ async function createUserFromPrivy(privyUserId, fallbackEmail, name) {
     return userRecord;
   } catch (createError) {
     // Handle duplicate key errors (race condition)
-    if (createError.code === 11000 || createError.message?.includes("duplicate")) {
+    if (
+      createError.code === 11000 ||
+      createError.message?.includes("duplicate")
+    ) {
       console.log("Duplicate detected, fetching existing user...");
       const existingRecord = await User.findOne({
         $or: [
@@ -396,12 +406,12 @@ async function createUserFromPrivy(privyUserId, fallbackEmail, name) {
           { email: userEmail.toLowerCase().trim() },
         ],
       });
-      
+
       if (existingRecord) {
         return existingRecord;
       }
     }
-    
+
     throw createError;
   }
 }
@@ -416,12 +426,12 @@ async function createUserFromPrivy(privyUserId, fallbackEmail, name) {
 async function fetchUserEmailFromPrivy(privyUserId, fallbackEmail) {
   try {
     const privyUser = await privy.users().get(privyUserId);
-    
+
     if (privyUser?.linked_accounts) {
       const emailAccount = privyUser.linked_accounts.find(
         (acc) => acc.type === "email"
       );
-      
+
       if (emailAccount?.address) {
         return emailAccount.address;
       }
@@ -453,12 +463,15 @@ async function getOrCreateWallet(privyUserId) {
       chain_type: createdWallet.chain_type,
     };
   } catch (walletError) {
-    console.warn("Wallet creation failed, attempting to list existing wallets:", walletError.message);
+    console.warn(
+      "Wallet creation failed, attempting to list existing wallets:",
+      walletError.message
+    );
 
     // Try to get existing wallet
     try {
-      const wallets = await privy.wallets().list({ 
-        owner: { user_id: privyUserId } 
+      const wallets = await privy.wallets().list({
+        owner: { user_id: privyUserId },
       });
 
       if (wallets?.length > 0) {

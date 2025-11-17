@@ -1,31 +1,6 @@
-import jwt from "jsonwebtoken";
 import { privy } from "../services/privy.js";
 import User from "../models/User.js";
-
-// Generate JWT Token with Privy user ID
-const generateToken = (privyUserId) => {
-  if (!privyUserId) {
-    throw new Error("Cannot generate token without privyUserId");
-  }
-  return jwt.sign({ privyUserId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || "7d",
-  });
-};
-
-// Set cookie with token
-const setTokenCookie = (res, token) => {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax", // Changed to 'lax' for OAuth redirects
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: "/",
-  };
-
-  // Set both cookie names for compatibility
-  res.cookie("token", token, cookieOptions);
-  res.cookie("privy-token", token, cookieOptions);
-};
+import { generateToken, setTokenCookie } from "../utils/token.js";
 
 // @desc    Google OAuth callback handler
 // @route   GET /api/auth/google/callback
