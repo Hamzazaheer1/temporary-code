@@ -51,7 +51,7 @@ See [PRIVY_SETUP.md](./PRIVY_SETUP.md) for detailed Privy configuration instruct
   {
     "email": "user@example.com",
     "password": "password123",
-    "name": "John Doe" // optional
+    "name": "John Doe"
   }
   ```
 - **Response:**
