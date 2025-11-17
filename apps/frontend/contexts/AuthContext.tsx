@@ -11,6 +11,7 @@ import {
 import { usePrivy } from "@privy-io/react-auth";
 import { authApi, User } from "@/lib/api";
 import { setAccessTokenFetcher } from "@/lib/axios";
+import apiClient from "@/lib/axios";
 
 interface AuthContextType {
   user: User | null;
@@ -20,13 +21,16 @@ interface AuthContextType {
   signin: (email: string, privyToken: string, name?: string) => Promise<void>;
   signout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  setToken: (token: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const TOKEN_STORAGE_KEY = "auth_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   const {
     ready,
@@ -40,12 +44,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setAccessTokenFetcher(null);
   }, [getAccessToken]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (storedToken) {
+      setAuthToken(storedToken);
+      apiClient.defaults.headers.common.Authorization = `Bearer ${storedToken}`;
+    }
+  }, []);
+
   const fetchUser = useCallback(async () => {
-    if (!ready) {
+    if (!ready && !authToken) {
       return;
     }
 
-    if (!privyAuthenticated) {
+    if (!privyAuthenticated && !authToken) {
       setUser(null);
       setLoading(false);
       return;
@@ -65,14 +80,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [privyAuthenticated, ready]);
+  }, [authToken, privyAuthenticated, ready]);
 
   useEffect(() => {
-    if (!ready) {
-      return;
-    }
     fetchUser();
-  }, [fetchUser, ready]);
+  }, [fetchUser]);
+
+  const setToken = useCallback(
+    async (token: string | null) => {
+      if (typeof window !== "undefined") {
+        if (token) {
+          window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+          apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+        } else {
+          window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+          delete apiClient.defaults.headers.common.Authorization;
+        }
+      }
+      setAuthToken(token);
+
+      if (token) {
+        await fetchUser();
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    },
+    [fetchUser]
+  );
 
   const signup = async (email: string, name?: string) => {
     try {
@@ -85,8 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signin = async (email: string, privyToken: string, name?: string) => {
     try {
-      await authApi.signin(email, privyToken, name);
-      await fetchUser();
+      const response = await authApi.signin(email, privyToken, name);
+      const token = response.data?.token;
+      if (token) {
+        await setToken(token);
+      } else {
+        await fetchUser();
+      }
     } catch (error: any) {
       throw error;
     }
@@ -98,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error signing out:", error);
     } finally {
+      await setToken(null);
       try {
         await logout();
       } catch (privyError) {
@@ -122,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signin,
         signout,
         refreshUser,
+        setToken,
       }}
     >
       {children}

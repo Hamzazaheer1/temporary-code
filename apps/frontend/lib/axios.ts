@@ -22,14 +22,16 @@ export const apiClient = axios.create({
 // Request interceptor
 apiClient.interceptors.request.use(
   async (config) => {
+    if (config.headers?.Authorization) {
+      return config;
+    }
+
     if (accessTokenFetcher) {
       try {
         const token = await accessTokenFetcher();
         if (token) {
-          config.headers = {
-            ...config.headers,
-            Authorization: `Bearer ${token}`,
-          };
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${token}`;
         }
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {

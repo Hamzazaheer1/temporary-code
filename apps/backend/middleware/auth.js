@@ -1,4 +1,5 @@
-import { privy } from "../services/privy.js";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
 export const protect = async (req, res, next) => {
   try {
@@ -8,7 +9,9 @@ export const protect = async (req, res, next) => {
       : headerToken;
 
     const token =
-      bearerToken?.trim() || req.cookies?.["privy-token"] || req.cookies?.token;
+      bearerToken?.trim() ||
+      req.cookies?.["token"] ||
+      req.cookies?.["privy-token"];
 
     if (!token) {
       return res.status(401).json({
@@ -17,13 +20,9 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    const verifiedClaims = await privy.utils().auth().verifyAuthToken(token);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const privyUserId =
-      verifiedClaims.userId ||
-      verifiedClaims.user_id ||
-      verifiedClaims.sub ||
-      (verifiedClaims.user && verifiedClaims.user.id);
+    const privyUserId = decoded?.privyUserId;
 
     if (!privyUserId) {
       return res.status(401).json({
@@ -32,21 +31,25 @@ export const protect = async (req, res, next) => {
       });
     }
 
+    const userRecord = await User.findOne({ privyUserId });
+
+    if (!userRecord) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized, user not found",
+      });
+    }
+
     req.user = {
-      id: privyUserId,
+      id: userRecord._id,
       privyId: privyUserId,
       privyUserId,
-      sessionId:
-        verifiedClaims.sessionId ||
-        verifiedClaims.session_id ||
-        verifiedClaims.sid ||
-        null,
-      claims: verifiedClaims,
+      user: userRecord,
     };
 
     return next();
   } catch (error) {
-    console.error("Token verification failed:", error);
+    console.error("Token verification failed:", error.message);
     return res.status(401).json({
       success: false,
       message: "Not authorized, invalid or expired token",
