@@ -39,14 +39,10 @@ app.use(passport.session());
 // CORS middleware (allow all origins)
 app.use(
   cors({
-    origin: "*",
+    origin: (origin, callback) => {
+      callback(null, origin || "*");
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Accept",
-      "X-Requested-With",
-    ],
     credentials: false,
     maxAge: 86400,
   })
