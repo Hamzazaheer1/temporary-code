@@ -13,7 +13,7 @@ export const setAccessTokenFetcher = (fetcher: AccessTokenFetcher | null) => {
 // Create axios instance
 export const apiClient = axios.create({
   baseURL: API_URL,
-  withCredentials: true, // Allow cookies if configured
+  withCredentials: false,
   headers: {
     "Content-Type": "application/json",
   },

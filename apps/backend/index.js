@@ -37,19 +37,42 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // CORS middleware (allow all origins)
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL?.replace(/^https:/, "http:"),
+  "http://localhost:3000",
+  "https://localhost:3000",
+  "https://temporary-code-frontend.vercel.app",
+].filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      callback(null, origin || "*");
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, origin || allowedOrigins[0] || "*");
+      }
+      return callback(null, origin);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: false,
     maxAge: 86400,
   })
 );
-app.options("*", cors());
+
+app.options(
+  "*",
+  cors({
+    origin: allowedOrigins,
+    credentials: false,
+  })
+);
 
 // MongoDB connection
+console.log(
+  "🔌 MongoDB connection target:",
+  MONGODB_URI ? MONGODB_URI.replace(/:\/\/.*@/, "://****:****@") : "undefined"
+);
+
 mongoose
   .connect(MONGODB_URI)
   .then(() => {
