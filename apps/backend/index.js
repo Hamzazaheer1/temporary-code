@@ -136,8 +136,12 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("Error stack:", err.stack);
+  console.error("❌ Express error handler triggered");
+  console.error("Request URL:", req.url);
+  console.error("Request method:", req.method);
+  console.error("Error name:", err.name);
   console.error("Error message:", err.message);
+  console.error("Error stack:", err.stack);
 
   // Check for Privy configuration errors
   if (
@@ -152,6 +156,18 @@ app.use((err, req, res, next) => {
         process.env.NODE_ENV === "development"
           ? "Invalid or missing PRIVY_APP_ID or PRIVY_APP_SECRET. Please check your .env file and ensure you have valid Privy credentials from https://dashboard.privy.io/"
           : "Server configuration error",
+    });
+  }
+
+  // Check for Bad Request errors (often from Passport/Google OAuth)
+  if (err.status === 400 || err.message?.includes("Bad Request")) {
+    console.error(
+      "⚠️ Bad Request error detected - likely OAuth configuration issue"
+    );
+    return res.status(400).json({
+      success: false,
+      message: "Bad Request",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 

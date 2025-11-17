@@ -28,14 +28,28 @@ passport.deserializeUser(async (id, done) => {
 // Google OAuth Strategy
 // This follows Privy's recommended approach for backend-based OAuth
 // Users are created in Privy with Google OAuth credentials
+const callbackUrl =
+  process.env.GOOGLE_CALLBACK_URL ||
+  "http://localhost:4000/api/auth/google/callback";
+console.log("🔧 Google OAuth Strategy configured:");
+console.log(
+  "  - Client ID:",
+  process.env.GOOGLE_CLIENT_ID
+    ? "***" + process.env.GOOGLE_CLIENT_ID.slice(-4)
+    : "NOT SET"
+);
+console.log(
+  "  - Client Secret:",
+  process.env.GOOGLE_CLIENT_SECRET ? "***SET***" : "NOT SET"
+);
+console.log("  - Callback URL:", callbackUrl);
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL:
-        process.env.GOOGLE_CALLBACK_URL ||
-        "http://localhost:4000/api/auth/google/callback",
+      callbackURL: callbackUrl,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -387,7 +401,13 @@ passport.use(
           isExisting: isExistingPrivyUser || !!userRecord,
         });
       } catch (error) {
-        console.error("Google OAuth strategy error:", error);
+        console.error("❌ Google OAuth strategy error:", error);
+        console.error("Error details:", {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+          code: error.code,
+        });
         return done(error, null);
       }
     }

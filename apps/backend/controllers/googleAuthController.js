@@ -9,9 +9,17 @@ import { generateToken, setTokenCookie } from "../utils/token.js";
 // The user is already created/linked in Privy by the Passport strategy
 export const googleCallback = async (req, res) => {
   try {
+    console.log("✅ Google callback handler called");
+    console.log(
+      "Request user:",
+      req.user ? { id: req.user.id, email: req.user.email } : "null"
+    );
+    console.log("Request query:", req.query);
+
     const user = req.user;
 
     if (!user || !user.id) {
+      console.error("❌ No user in request after Passport authentication");
       return res.redirect(
         `${
           process.env.FRONTEND_URL || "http://localhost:3000"
