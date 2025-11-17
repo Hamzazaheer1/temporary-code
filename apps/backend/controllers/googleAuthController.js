@@ -73,6 +73,12 @@ export const googleCallback = async (req, res) => {
 
     // Redirect to frontend
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    console.log(
+      "Google callback redirecting to frontend:",
+      frontendUrl,
+      "existing user?",
+      !!user.isExisting
+    );
     const redirectUrl = user.isExisting
       ? `${frontendUrl}/?token=${token}&message=signed_in`
       : `${frontendUrl}/?token=${token}&message=signed_up`;
@@ -81,6 +87,10 @@ export const googleCallback = async (req, res) => {
   } catch (error) {
     console.error("Google OAuth callback error:", error);
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    console.error(
+      "Google callback error redirect using frontend URL:",
+      frontendUrl
+    );
     res.redirect(`${frontendUrl}/sign-in?error=authentication_failed`);
   }
 };
