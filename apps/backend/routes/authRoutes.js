@@ -27,12 +27,28 @@ router.get(
   "/google/callback",
   (req, res, next) => {
     console.log("🔵 Google OAuth callback received");
-    console.log("Query params:", req.query);
     console.log(
-      "Callback URL configured:",
-      process.env.GOOGLE_CALLBACK_URL ||
-        "http://localhost:4000/api/auth/google/callback"
+      "Full request URL:",
+      req.protocol + "://" + req.get("host") + req.originalUrl
     );
+    console.log("Query params:", req.query);
+    const configuredCallback =
+      process.env.GOOGLE_CALLBACK_URL ||
+      "http://localhost:4000/api/auth/google/callback";
+    console.log("Callback URL configured in env:", configuredCallback);
+    console.log(
+      "Actual request URL:",
+      req.protocol + "://" + req.get("host") + req.path
+    );
+
+    // Check if they match
+    const actualUrl = req.protocol + "://" + req.get("host") + req.path;
+    if (actualUrl !== configuredCallback) {
+      console.error("⚠️ CALLBACK URL MISMATCH!");
+      console.error("  Expected:", configuredCallback);
+      console.error("  Actual:", actualUrl);
+      console.error("  This will cause 'Bad Request' error from Google!");
+    }
     next();
   },
   (req, res, next) => {

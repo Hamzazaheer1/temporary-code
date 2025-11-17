@@ -28,9 +28,22 @@ passport.deserializeUser(async (id, done) => {
 // Google OAuth Strategy
 // This follows Privy's recommended approach for backend-based OAuth
 // Users are created in Privy with Google OAuth credentials
+// IMPORTANT: GOOGLE_CALLBACK_URL must match EXACTLY what's configured in Google Cloud Console
+// For production, it should be: https://your-backend-domain.vercel.app/api/auth/google/callback
 const callbackUrl =
   process.env.GOOGLE_CALLBACK_URL ||
   "http://localhost:4000/api/auth/google/callback";
+
+if (!process.env.GOOGLE_CALLBACK_URL) {
+  console.warn(
+    "⚠️ WARNING: GOOGLE_CALLBACK_URL not set! Using default localhost URL."
+  );
+  console.warn("   This will cause OAuth to fail in production!");
+  console.warn(
+    "   Set GOOGLE_CALLBACK_URL to your production backend URL in Vercel."
+  );
+}
+
 console.log("🔧 Google OAuth Strategy configured:");
 console.log(
   "  - Client ID:",
@@ -43,6 +56,9 @@ console.log(
   process.env.GOOGLE_CLIENT_SECRET ? "***SET***" : "NOT SET"
 );
 console.log("  - Callback URL:", callbackUrl);
+console.log(
+  "  ⚠️  Make sure this EXACT URL is in Google Cloud Console → OAuth 2.0 Client → Authorized redirect URIs"
+);
 
 passport.use(
   new GoogleStrategy(
@@ -50,8 +66,15 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: callbackUrl,
+      passReqToCallback: false,
     },
     async (accessToken, refreshToken, profile, done) => {
+      console.log("🟢 Google OAuth strategy callback executed");
+      console.log("Profile received:", {
+        id: profile.id,
+        email: profile.emails?.[0]?.value,
+        name: profile.displayName,
+      });
       try {
         const email = profile.emails?.[0]?.value;
         const name =
